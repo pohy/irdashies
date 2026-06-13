@@ -30,6 +30,11 @@ import {
   flushReferenceLapsOnShutdown,
 } from './app/storage/referenceLaps';
 import { setupChromiumFlagsBridge } from './app/bridge/chromiumFlagsBridge';
+import {
+  isVrOverlayEnabled,
+  startVrOverlay,
+  stopVrOverlay,
+} from './app/vr/vrOverlay';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) app.quit();
@@ -78,6 +83,11 @@ app.on('ready', async () => {
 
   overlayManager.createOverlays(dashboard);
 
+  // Experimental native VR overlay (opt-in via IRDASHIES_VR=1).
+  if (isVrOverlayEnabled()) {
+    startVrOverlay();
+  }
+
   keybindingManager = new KeybindingManager(overlayManager);
   keybindingManager.registerAll();
   // Start the WebHID host window that reads game controllers for gamepad bindings.
@@ -113,6 +123,7 @@ app.on('quit', () => {
 app.on('before-quit', () => {
   overlayManager.markQuitting();
   keybindingManager?.stopGamepad();
+  stopVrOverlay();
   // Synchronous flush so any pending debounced reference-lap write completes
   // before the process exits.
   flushReferenceLapsOnShutdown();
