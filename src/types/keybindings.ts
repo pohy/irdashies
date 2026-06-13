@@ -2,7 +2,8 @@
 export type KeybindingActionId =
   | 'toggle-hide-ui'
   | 'toggle-edit-mode'
-  | 'save-telemetry';
+  | 'save-telemetry'
+  | 'recenter-vr';
 
 export interface KeybindingEntry {
   /**
@@ -69,6 +70,12 @@ export const DEFAULT_KEYBINDINGS: KeybindingsMap = {
     accelerator: 'F7',
     label: 'Save Telemetry',
     description: 'Capture current telemetry data and screenshots',
+    isDefault: true,
+  },
+  'recenter-vr': {
+    accelerator: 'F8',
+    label: 'Recenter VR Overlay',
+    description: 'Move the VR overlay in front of your current view',
     isDefault: true,
   },
 };
