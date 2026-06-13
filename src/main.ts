@@ -85,7 +85,7 @@ app.on('ready', async () => {
 
   // Experimental native VR overlay (opt-in via IRDASHIES_VR=1).
   if (isVrOverlayEnabled()) {
-    startVrOverlay();
+    startVrOverlay(overlayManager);
   }
 
   keybindingManager = new KeybindingManager(overlayManager);
