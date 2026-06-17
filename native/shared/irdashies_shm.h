@@ -16,11 +16,11 @@
 
 #include <cstdint>
 
-#define IRDASHIES_SHM_MAPPING_NAME L"Local\\irdashies-openxr-shm-v1"
-#define IRDASHIES_SHM_MUTEX_NAME L"Local\\irdashies-openxr-shm-v1.mutex"
+#define IRDASHIES_SHM_MAPPING_NAME L"Local\\irdashies-openxr-shm-v2"
+#define IRDASHIES_SHM_MUTEX_NAME L"Local\\irdashies-openxr-shm-v2.mutex"
 
 #define IRDASHIES_SHM_MAGIC 0x31445249u  // 'IRD1'
-#define IRDASHIES_SHM_VERSION 1u
+#define IRDASHIES_SHM_VERSION 2u
 
 // flags
 #define IRDASHIES_SHM_FLAG_FEEDER_ATTACHED 0x1u
@@ -52,5 +52,12 @@ struct IrdashiesShmHeader {
   float posePosition[3];     // metres
   float poseOrientation[4];  // quaternion x,y,z,w
   float quadSizeMeters[2];   // width,height in metres
+
+  // Consumer -> producer heartbeat. Bumped by the OpenXR layer once per frame it
+  // actually composites a producer frame into the headset; stays put when the
+  // layer is absent or idle. The producer reads it back to drive the app's VR
+  // status indicator (advancing = green, stalled = amber). 8-byte aligned so the
+  // single-writer/single-reader access is atomic without the mutex.
+  uint64_t consumerFrameCount;  // 0 = layer has never composited a frame
 };
 #pragma pack(pop)

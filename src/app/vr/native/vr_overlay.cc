@@ -82,6 +82,10 @@ struct State {
   HANDLE mapping = nullptr;
   HANDLE mutex = nullptr;
   IrdashiesShmHeader* shm = nullptr;
+
+  // Consumer (OpenXR layer) liveness, derived from its SHM heartbeat.
+  uint64_t lastConsumerCount = 0;
+  uint32_t consumerIdleFrames = 0xFFFFFFFFu;  // big = never seen the layer
 };
 
 State g;
@@ -140,6 +144,8 @@ void teardown() {
   g.format = DXGI_FORMAT_UNKNOWN;
   g.width = g.height = 0;
   g.fenceValue = 0;
+  g.lastConsumerCount = 0;
+  g.consumerIdleFrames = 0xFFFFFFFFu;
 }
 
 // start(config?) -> boolean
@@ -357,11 +363,24 @@ Napi::Value SubmitFrame(const Napi::CallbackInfo& info) {
   g.context4->Signal(g.fence, g.fenceValue);
   g.context->Flush();
 
+  uint64_t consumerCount = 0;
   if (g.mutex) WaitForSingleObject(g.mutex, INFINITE);
   g.shm->fenceValue = g.fenceValue;
   g.shm->frameNumber++;
   g.shm->flags |= IRDASHIES_SHM_FLAG_FEEDER_ATTACHED;
+  consumerCount = g.shm->consumerFrameCount;
   if (g.mutex) ReleaseMutex(g.mutex);
+
+  // Track consumer (OpenXR layer) liveness: its heartbeat advances once per
+  // frame it composites. If it stops advancing across produced frames the layer
+  // is gone or idle. ~30 produced frames (~0.5s @60fps) defines "active" in
+  // ConsumerActive below.
+  if (consumerCount != g.lastConsumerCount) {
+    g.lastConsumerCount = consumerCount;
+    g.consumerIdleFrames = 0;
+  } else if (g.consumerIdleFrames != 0xFFFFFFFFu) {
+    ++g.consumerIdleFrames;
+  }
 
   static bool firstOk = false;
   if (!firstOk) {
@@ -401,12 +420,23 @@ Napi::Value Stop(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// consumerActive() -> boolean
+// True when the OpenXR layer's heartbeat advanced within the last ~0.5s of
+// produced frames, i.e. the headset is actually receiving our overlay. False
+// until the layer composites its first frame, or after it goes idle.
+Napi::Value ConsumerActive(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  bool active = g.shm != nullptr && g.consumerIdleFrames < 30u;
+  return Napi::Boolean::New(env, active);
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("start", Napi::Function::New(env, Start));
   exports.Set("submitFrame", Napi::Function::New(env, SubmitFrame));
   exports.Set("setPose", Napi::Function::New(env, SetPose));
   exports.Set("recenter", Napi::Function::New(env, Recenter));
   exports.Set("stop", Napi::Function::New(env, Stop));
+  exports.Set("consumerActive", Napi::Function::New(env, ConsumerActive));
   return exports;
 }
 

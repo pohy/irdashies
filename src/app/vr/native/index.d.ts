@@ -19,6 +19,13 @@ export interface IVrOverlayNative {
   setPose(pose: VrPose): void;
   /** Request the OpenXR layer to recenter the quad to the current head pose. */
   recenter(): void;
+  /**
+   * True when the OpenXR layer is actively compositing our frames into the
+   * headset (its SHM heartbeat advanced within the last ~0.5s of produced
+   * frames). False until the first composited frame or after the layer goes
+   * idle. Used to drive the app's end-to-end VR status indicator.
+   */
+  consumerActive(): boolean;
   /** Release all resources and detach the feeder. */
   stop(): void;
 }

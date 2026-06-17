@@ -88,20 +88,23 @@ static PFN_xrLocateSpace g_next_xrLocateSpace = nullptr;
 // ---------------------------------------------------------------------------
 static HANDLE g_shmMapping = nullptr;
 static HANDLE g_shmMutex = nullptr;
-static const IrdashiesShmHeader* g_shm = nullptr;
+// Mapped read/write: we read the producer's frames and write back a heartbeat
+// (consumerFrameCount) so the app can show end-to-end VR status. FILE_MAP_WRITE
+// grants read+write on the producer's PAGE_READWRITE section.
+static IrdashiesShmHeader* g_shm = nullptr;
 
 static bool ensureShmOpen() {
   if (g_shm) return true;
   if (!g_shmMapping) {
     g_shmMapping =
-        OpenFileMappingW(FILE_MAP_READ, FALSE, IRDASHIES_SHM_MAPPING_NAME);
+        OpenFileMappingW(FILE_MAP_WRITE, FALSE, IRDASHIES_SHM_MAPPING_NAME);
     if (!g_shmMapping) return false;  // producer not running
   }
   if (!g_shmMutex) {
     g_shmMutex = OpenMutexW(SYNCHRONIZE, FALSE, IRDASHIES_SHM_MUTEX_NAME);
   }
-  g_shm = (const IrdashiesShmHeader*)MapViewOfFile(
-      g_shmMapping, FILE_MAP_READ, 0, 0, sizeof(IrdashiesShmHeader));
+  g_shm = (IrdashiesShmHeader*)MapViewOfFile(
+      g_shmMapping, FILE_MAP_WRITE, 0, 0, sizeof(IrdashiesShmHeader));
   if (g_shm) layerLog("Connected to producer shared memory.");
   return g_shm != nullptr;
 }
@@ -126,8 +129,6 @@ static bool readShmFrame(IrdashiesShmHeader& out) {
 // ---------------------------------------------------------------------------
 // Session state
 // ---------------------------------------------------------------------------
-static constexpr uint32_t kFallbackSize = 512;
-
 struct SessionState {
   XrSession session = XR_NULL_HANDLE;
   ID3D11Device* device = nullptr;
@@ -148,7 +149,7 @@ struct SessionState {
   bool hasRecenterPose = false;
   XrPosef recenterPose{};
 
-  // Quad swapchain (sized to the shared texture, or kFallbackSize).
+  // Quad swapchain (sized to the shared texture).
   XrSwapchain swapchain = XR_NULL_HANDLE;
   int64_t swapchainFormat = 0;
   uint32_t width = 0;
@@ -509,8 +510,15 @@ static XrResult XRAPI_CALL my_xrEndFrame(XrSession session,
     }
   }
 
-  const uint32_t w = haveFrame ? frame.width : kFallbackSize;
-  const uint32_t h = haveFrame ? frame.height : kFallbackSize;
+  // No producer frames: composite nothing and pass the game's own frame through
+  // untouched. VR connection status is surfaced in the irDashies app (VR
+  // settings indicator), not as an in-headset test pattern.
+  if (!haveFrame) {
+    return g_next_xrEndFrame(session, frameEndInfo);
+  }
+
+  const uint32_t w = frame.width;
+  const uint32_t h = frame.height;
   if (!ensureSwapchain(w, h)) {
     return g_next_xrEndFrame(session, frameEndInfo);
   }
@@ -555,56 +563,50 @@ static XrResult XRAPI_CALL my_xrEndFrame(XrSession session,
         cmd->Release();
       }
     }
-  } else {
-    // No producer: animated solid color so something is always visible.
-    double seconds = (double)frameEndInfo->displayTime / 1e9;
-    float pulse = 0.5f + 0.5f * (float)std::sin(seconds * 2.0);
-    float clear[4] = {0.0f, 0.6f * pulse + 0.2f, 1.0f, 1.0f};
-    if (idx < g.rtvs.size() && g.rtvs[idx]) {
-      g.context->ClearRenderTargetView(g.rtvs[idx], clear);
-    }
+
+    // Heartbeat: tell the producer (app) we composited a frame this tick so the
+    // app's VR status indicator can confirm an end-to-end connection. Lock-free
+    // on purpose - this runs on the game's render thread, where a per-frame
+    // mutex syscall is exactly what we want to avoid. Single writer (this layer)
+    // and single reader (producer); InterlockedIncrement64 makes the RMW
+    // formally atomic so the producer never observes a torn count.
+    InterlockedIncrement64(
+        reinterpret_cast<volatile LONG64*>(&g_shm->consumerFrameCount));
   }
 
   XrSwapchainImageReleaseInfo rel{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
   g_next_xrReleaseSwapchainImage(g.swapchain, &rel);
 
   XrCompositionLayerQuad quad{XR_TYPE_COMPOSITION_LAYER_QUAD};
-  // Real producer frames are premultiplied-alpha (Chromium OSR) - blend so
-  // transparent page areas are see-through. The fallback pulse is opaque.
-  quad.layerFlags =
-      haveFrame ? XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT : 0;
+  // Producer frames are premultiplied-alpha (Chromium OSR) - blend so
+  // transparent page areas are see-through.
+  quad.layerFlags = XR_COMPOSITION_LAYER_BLEND_TEXTURE_SOURCE_ALPHA_BIT;
   quad.space = g.localSpace;
   quad.eyeVisibility = XR_EYE_VISIBILITY_BOTH;
   quad.subImage.swapchain = g.swapchain;
   quad.subImage.imageRect = {{0, 0}, {(int32_t)w, (int32_t)h}};
   quad.subImage.imageArrayIndex = 0;
-  if (haveFrame) {
-    const XrQuaternionf offsetOrient{
-        frame.poseOrientation[0], frame.poseOrientation[1],
-        frame.poseOrientation[2], frame.poseOrientation[3]};
-    const XrVector3f offsetPos{frame.posePosition[0], frame.posePosition[1],
-                               frame.posePosition[2]};
-    if (g.hasRecenterPose) {
-      // Apply the live SHM pose as an offset inside the recentered anchor frame
-      // so distance (local -Z), lateral (local X) and vertical (local Y) edits
-      // propagate in real time. Producer orientation is identity in practice,
-      // but compose it for correctness.
-      const XrVector3f worldOffset =
-          rotateVec(g.recenterPose.orientation, offsetPos);
-      quad.pose.position = {g.recenterPose.position.x + worldOffset.x,
-                            g.recenterPose.position.y + worldOffset.y,
-                            g.recenterPose.position.z + worldOffset.z};
-      quad.pose.orientation = quatMul(g.recenterPose.orientation, offsetOrient);
-    } else {
-      quad.pose.orientation = offsetOrient;
-      quad.pose.position = offsetPos;
-    }
-    quad.size = {frame.quadSizeMeters[0], frame.quadSizeMeters[1]};
+  const XrQuaternionf offsetOrient{
+      frame.poseOrientation[0], frame.poseOrientation[1],
+      frame.poseOrientation[2], frame.poseOrientation[3]};
+  const XrVector3f offsetPos{frame.posePosition[0], frame.posePosition[1],
+                             frame.posePosition[2]};
+  if (g.hasRecenterPose) {
+    // Apply the live SHM pose as an offset inside the recentered anchor frame
+    // so distance (local -Z), lateral (local X) and vertical (local Y) edits
+    // propagate in real time. Producer orientation is identity in practice,
+    // but compose it for correctness.
+    const XrVector3f worldOffset =
+        rotateVec(g.recenterPose.orientation, offsetPos);
+    quad.pose.position = {g.recenterPose.position.x + worldOffset.x,
+                          g.recenterPose.position.y + worldOffset.y,
+                          g.recenterPose.position.z + worldOffset.z};
+    quad.pose.orientation = quatMul(g.recenterPose.orientation, offsetOrient);
   } else {
-    quad.pose.orientation = {0, 0, 0, 1};
-    quad.pose.position = {0, 0, -1.5f};
-    quad.size = {0.5f, 0.5f};
+    quad.pose.orientation = offsetOrient;
+    quad.pose.position = offsetPos;
   }
+  quad.size = {frame.quadSizeMeters[0], frame.quadSizeMeters[1]};
 
   std::vector<const XrCompositionLayerBaseHeader*> layers(
       frameEndInfo->layers, frameEndInfo->layers + frameEndInfo->layerCount);

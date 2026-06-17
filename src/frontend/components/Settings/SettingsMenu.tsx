@@ -11,6 +11,8 @@ import {
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { useDashboard } from '@irdashies/context';
+import type { VrStatus } from '@irdashies/types';
+import { useVrStatus } from './hooks/useVrStatus';
 
 interface MenuItem {
   to: string;
@@ -199,11 +201,13 @@ const MenuLink = ({
   pathname,
   showIcon = false,
   isEnabled,
+  statusDot,
 }: {
   item: MenuItem;
   pathname: string;
   showIcon?: boolean;
   isEnabled?: boolean;
+  statusDot?: { color: string; title: string };
 }) => {
   const isActive = pathname.startsWith(`/settings${item.path}`);
   return (
@@ -225,6 +229,12 @@ const MenuLink = ({
           />
         )}
         <span className="flex-1">{item.label}</span>
+        {statusDot && (
+          <span
+            title={statusDot.title}
+            className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot.color}`}
+          />
+        )}
         {isEnabled && (
           <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400" />
         )}
@@ -233,9 +243,25 @@ const MenuLink = ({
   );
 };
 
+const VR_STATUS_DOT: Record<VrStatus, { color: string; title: string }> = {
+  off: {
+    color: 'bg-red-500',
+    title: 'VR overlay not running (launch with IRDASHIES_VR=1)',
+  },
+  waiting: {
+    color: 'bg-amber-400',
+    title: 'VR overlay running but not reaching the headset',
+  },
+  active: {
+    color: 'bg-emerald-400',
+    title: 'VR overlay active (headset receiving frames)',
+  },
+};
+
 export const SettingsMenu = () => {
   const { pathname } = useLocation();
   const { currentDashboard } = useDashboard();
+  const vrStatus = useVrStatus();
 
   const isWidgetEnabled = (widgetType: string) => {
     const widget = currentDashboard?.widgets.find(
@@ -248,7 +274,15 @@ export const SettingsMenu = () => {
     <div className="w-1/4 bg-slate-800 p-3 rounded-md flex flex-col gap-0 overflow-y-auto">
       <ul className="flex flex-col pb-2 border-b border-slate-700">
         {generalItems.map((item) => (
-          <MenuLink key={item.path} item={item} pathname={pathname} showIcon />
+          <MenuLink
+            key={item.path}
+            item={item}
+            pathname={pathname}
+            showIcon
+            statusDot={
+              item.path === '/vr' ? VR_STATUS_DOT[vrStatus] : undefined
+            }
+          />
         ))}
       </ul>
 

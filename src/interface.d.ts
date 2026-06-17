@@ -8,6 +8,7 @@ import type {
   KeybindingsBridge,
   GamepadHostBridge,
   ChromiumFlagsBridge,
+  VrBridge,
 } from '@irdashies/types';
 
 declare global {
@@ -22,5 +23,6 @@ declare global {
     /** Present only in the hidden WebHID host renderer (src/hidHost.ts). */
     gamepadHost?: GamepadHostBridge;
     chromiumFlagsBridge: ChromiumFlagsBridge;
+    vrBridge: VrBridge;
   }
 }

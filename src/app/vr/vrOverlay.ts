@@ -5,8 +5,10 @@ import type { OverlayManager } from '../overlayManager';
 import {
   DEFAULT_VR_OVERLAY_SETTINGS,
   type VrOverlaySettings,
+  type VrStatus,
 } from '@irdashies/types';
 import { VrOverlayNative, type VrPose } from './native';
+import { deriveVrStatus } from './vrStatus';
 
 // Injected by the forge vite plugin (same globals overlayManager uses).
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
@@ -19,6 +21,11 @@ const VR_SUPERSAMPLE = 8;
 const VR_MAX_TEXTURE_DIM = 8192; // clamp longest side on high-res displays
 
 let osrWindow: BrowserWindow | null = null;
+
+// Wall-clock of the last successful GPU frame submission. Drives the VR status
+// indicator: if this goes stale while the overlay is running, frames aren't
+// flowing (GPU compositing off, etc).
+let lastPaintTime = 0;
 
 // Quad height follows the primary display aspect (height / width) so the texture
 // is never stretched. Captured at start; needed to recompute size on the fly.
@@ -148,7 +155,9 @@ export function startVrOverlay(
     }
 
     try {
-      VrOverlayNative.submitFrame(texture.textureInfo);
+      if (VrOverlayNative.submitFrame(texture.textureInfo)) {
+        lastPaintTime = Date.now();
+      }
     } catch (err) {
       logger.error('[VR] submitFrame failed', err);
     } finally {
@@ -195,6 +204,26 @@ export function recenterVrOverlay(): void {
   }
 }
 
+/**
+ * Current VR overlay connection status for the settings indicator. Combines
+ * producer liveness (last paint) with the OpenXR layer's heartbeat
+ * (consumerActive) into an end-to-end red/amber/green signal.
+ */
+export function getVrStatus(): VrStatus {
+  let consumerActive = false;
+  try {
+    consumerActive = VrOverlayNative.consumerActive();
+  } catch {
+    consumerActive = false;
+  }
+  return deriveVrStatus({
+    enabled: isVrOverlayEnabled(),
+    running: osrWindow !== null,
+    msSinceLastPaint: Date.now() - lastPaintTime,
+    consumerActive,
+  });
+}
+
 export function stopVrOverlay(): void {
   try {
     VrOverlayNative.stop();
@@ -205,4 +234,5 @@ export function stopVrOverlay(): void {
     osrWindow.destroy();
     osrWindow = null;
   }
+  lastPaintTime = 0;
 }

@@ -18,6 +18,7 @@ import type {
   PersonalBestLapBridge,
   ChromiumFlagsBridge,
   ChromiumFlagsType,
+  VrBridge,
 } from '@irdashies/types';
 
 export function exposeBridge() {
@@ -287,4 +288,8 @@ export function exposeBridge() {
     saveFlags: (flags: ChromiumFlagsType) =>
       ipcRenderer.invoke('chromiumFlags:save', flags),
   } as ChromiumFlagsBridge);
+
+  contextBridge.exposeInMainWorld('vrBridge', {
+    getStatus: () => ipcRenderer.invoke('vr:getStatus'),
+  } as VrBridge);
 }

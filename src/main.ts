@@ -30,6 +30,7 @@ import {
   flushReferenceLapsOnShutdown,
 } from './app/storage/referenceLaps';
 import { setupChromiumFlagsBridge } from './app/bridge/chromiumFlagsBridge';
+import { setupVrBridge } from './app/bridge/vrBridge';
 import {
   isVrOverlayEnabled,
   startVrOverlay,
@@ -77,6 +78,7 @@ app.on('ready', async () => {
   setupReferenceLapsBridge();
   setupPersonalBestLapTimesBridge();
   setupChromiumFlagsBridge();
+  setupVrBridge();
 
   // Start component server for browser components
   await startComponentServer(bridge, dashboardBridge);
