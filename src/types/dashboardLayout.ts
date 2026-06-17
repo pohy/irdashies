@@ -98,6 +98,8 @@ export type FontSize =
  * propagate to the native OpenXR layer in real time via `setPose`.
  */
 export interface VrOverlaySettings {
+  /** Whether the VR overlay is running. Toggled in the VR settings section. */
+  enabled?: boolean;
   /** Physical width of the overlay quad. Height follows the display aspect. */
   width?: number;
   /** Distance of the quad in front of the user (along the view direction). */
@@ -110,6 +112,7 @@ export interface VrOverlaySettings {
 
 /** Defaults matching the original hard-coded quad placement. */
 export const DEFAULT_VR_OVERLAY_SETTINGS: Required<VrOverlaySettings> = {
+  enabled: false,
   width: 1.8,
   distance: 1.4,
   horizontal: 0,

@@ -24,12 +24,8 @@ hidden OSR BrowserWindow (useSharedTexture)
 ## Run (experimental, opt-in)
 
 The OpenXR layer must be built + registered first (see
-`native/openxr-layer`). Then:
-
-```pwsh
-$env:IRDASHIES_VR = "1"
-npm start
-```
+`native/openxr-layer`). Then `npm start` and enable the overlay with the toggle
+in the VR settings section.
 
 Launch iRacing (OpenXR) and the overlay should appear on the quad. The addon is
 rebuilt against Electron automatically by electron-forge on `npm start` /

@@ -32,12 +32,12 @@ import {
 import { setupChromiumFlagsBridge } from './app/bridge/chromiumFlagsBridge';
 import { setupVrBridge } from './app/bridge/vrBridge';
 import {
-  isVrOverlayEnabled,
   startVrOverlay,
   stopVrOverlay,
   applyVrOverlaySettings,
 } from './app/vr/vrOverlay';
 import { onDashboardUpdated } from './app/storage/dashboardEvents';
+import type { VrOverlaySettings } from '@irdashies/types';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) app.quit();
@@ -87,15 +87,18 @@ app.on('ready', async () => {
 
   overlayManager.createOverlays(dashboard);
 
-  // Experimental native VR overlay (opt-in via IRDASHIES_VR=1).
-  if (isVrOverlayEnabled()) {
-    startVrOverlay(overlayManager, dashboard?.generalSettings?.vr);
-    // Push placement changes to the native layer in real time as the user
-    // edits the VR settings section.
-    onDashboardUpdated((updated) => {
-      applyVrOverlaySettings(updated.generalSettings?.vr);
-    });
-  }
+  // Experimental native VR overlay — toggled in the VR settings section.
+  // Start/stop on the toggle and push placement changes live while running.
+  const syncVrOverlay = (settings?: VrOverlaySettings) => {
+    if (settings?.enabled) {
+      startVrOverlay(overlayManager, settings); // no-op if already running
+      applyVrOverlaySettings(settings);
+    } else {
+      stopVrOverlay(); // no-op if not running
+    }
+  };
+  syncVrOverlay(dashboard?.generalSettings?.vr);
+  onDashboardUpdated((updated) => syncVrOverlay(updated.generalSettings?.vr));
 
   keybindingManager = new KeybindingManager(overlayManager);
   keybindingManager.registerAll();

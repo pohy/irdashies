@@ -246,7 +246,7 @@ const MenuLink = ({
 const VR_STATUS_DOT: Record<VrStatus, { color: string; title: string }> = {
   off: {
     color: 'bg-red-500',
-    title: 'VR overlay not running (launch with IRDASHIES_VR=1)',
+    title: 'VR overlay disabled (enable it in VR settings)',
   },
   waiting: {
     color: 'bg-amber-400',

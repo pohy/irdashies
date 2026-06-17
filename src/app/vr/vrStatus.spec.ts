@@ -2,18 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { deriveVrStatus, VR_PAINT_STALE_MS } from './vrStatus';
 
 const base = {
-  enabled: true,
   running: true,
   msSinceLastPaint: 0,
   consumerActive: true,
 };
 
 describe('deriveVrStatus', () => {
-  it('off when not enabled', () => {
-    expect(deriveVrStatus({ ...base, enabled: false })).toBe('off');
-  });
-
-  it('off when enabled but not running', () => {
+  it('off when not running', () => {
     expect(deriveVrStatus({ ...base, running: false })).toBe('off');
   });
 

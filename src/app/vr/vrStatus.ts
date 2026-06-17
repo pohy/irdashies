@@ -8,8 +8,6 @@ import type { VrStatus } from '@irdashies/types';
 export const VR_PAINT_STALE_MS = 1500;
 
 export interface VrStatusInputs {
-  /** VR overlay opt-in is on (IRDASHIES_VR=1, win32). */
-  enabled: boolean;
   /** The offscreen producer window exists. */
   running: boolean;
   /** Time since the producer last submitted a GPU frame. */
@@ -20,7 +18,7 @@ export interface VrStatusInputs {
 
 /** Pure mapping from observed signals to the red/amber/green status. */
 export function deriveVrStatus(i: VrStatusInputs): VrStatus {
-  if (!i.enabled || !i.running) return 'off';
+  if (!i.running) return 'off';
   if (i.msSinceLastPaint > VR_PAINT_STALE_MS) return 'waiting';
   return i.consumerActive ? 'active' : 'waiting';
 }

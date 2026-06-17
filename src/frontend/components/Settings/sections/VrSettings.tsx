@@ -6,10 +6,14 @@ import {
   type VrOverlaySettings,
 } from '@irdashies/types';
 import { SettingNumberRow } from '../components/SettingNumberRow';
+import { ToggleSwitch } from '../components/ToggleSwitch';
 
 export const VrSettings = () => {
   const { currentDashboard, onDashboardUpdated } = useDashboard();
   const [settings, setSettings] = useState<Required<VrOverlaySettings>>({
+    enabled:
+      currentDashboard?.generalSettings?.vr?.enabled ??
+      DEFAULT_VR_OVERLAY_SETTINGS.enabled,
     width:
       currentDashboard?.generalSettings?.vr?.width ??
       DEFAULT_VR_OVERLAY_SETTINGS.width,
@@ -41,7 +45,13 @@ export const VrSettings = () => {
   return (
     <div className="flex flex-col h-full">
       <div className="flex-none p-4 bg-slate-700 rounded">
-        <h2 className="text-xl mb-1">VR</h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-xl">VR</h2>
+          <ToggleSwitch
+            enabled={settings.enabled}
+            onToggle={(enabled) => update({ enabled })}
+          />
+        </div>
         <p className="text-slate-400">
           Position and size the VR overlay quad. Changes apply in real time
           while the overlay is running.
@@ -90,9 +100,9 @@ export const VrSettings = () => {
         />
 
         <div className="p-3 bg-slate-700/50 rounded text-sm text-slate-400">
-          The VR overlay is experimental and must be enabled at launch
-          (IRDASHIES_VR=1). Use the &quot;Recenter VR Overlay&quot; key binding
-          to bring the overlay back to your current head position.
+          The VR overlay is experimental. Use the &quot;Recenter VR
+          Overlay&quot; key binding to bring the overlay back to your current
+          head position.
         </div>
       </div>
     </div>

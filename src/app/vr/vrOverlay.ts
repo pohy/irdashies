@@ -51,14 +51,6 @@ function poseFromSettings(settings?: VrOverlaySettings): VrPose {
 }
 
 /**
- * MVP gate: VR overlay is opt-in via env var while it is experimental and not
- * wired into settings yet. Windows only (native addon + OpenXR layer).
- */
-export function isVrOverlayEnabled(): boolean {
-  return process.platform === 'win32' && process.env.IRDASHIES_VR === '1';
-}
-
-/**
  * Render the overlay offscreen and feed each GPU frame to the native producer,
  * which publishes it over shared memory to the OpenXR layer.
  */
@@ -217,7 +209,6 @@ export function getVrStatus(): VrStatus {
     consumerActive = false;
   }
   return deriveVrStatus({
-    enabled: isVrOverlayEnabled(),
     running: osrWindow !== null,
     msSinceLastPaint: Date.now() - lastPaintTime,
     consumerActive,
@@ -225,14 +216,13 @@ export function getVrStatus(): VrStatus {
 }
 
 export function stopVrOverlay(): void {
+  if (!osrWindow) return; // not running — nothing to tear down (idempotent)
   try {
     VrOverlayNative.stop();
   } catch (err) {
     logger.error('[VR] native stop failed', err);
   }
-  if (osrWindow) {
-    osrWindow.destroy();
-    osrWindow = null;
-  }
+  osrWindow.destroy();
+  osrWindow = null;
   lastPaintTime = 0;
 }

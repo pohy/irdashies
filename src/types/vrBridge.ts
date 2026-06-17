@@ -1,7 +1,7 @@
 /**
  * VR overlay connection status, surfaced as a red/amber/green dot in settings.
- *  - 'off'     : overlay not running (not launched with IRDASHIES_VR=1, or
- *                failed to start) -> red
+ *  - 'off'     : overlay not running (disabled in VR settings, or failed to
+ *                start) -> red
  *  - 'waiting' : irDashies is producing frames but they are not reaching the
  *                headset (game/layer not running, GPU compositing off, ...) ->
  *                amber
