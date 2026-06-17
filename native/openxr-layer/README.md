@@ -4,10 +4,9 @@ OpenXR **implicit API layer**. Injects into any OpenXR D3D11 app, hooks
 `xrEndFrame`, and renders a composition-layer quad into the headset.
 
 It reads a shared D3D11 texture published by a producer over shared memory
-(`../shared/irdashies_shm.h`) and shader-blits it onto the quad. If no producer
-is running it falls back to an animated solid color, so there is always visible
-feedback. Electron is not wired in yet — use the test producer in
-`../shm-test-producer` as the texture source.
+(`../shared/irdashies_shm.h`) and shader-blits it onto the quad. The producer is
+the irDashies app (`src/app/vr`). If no producer is running, the layer passes
+the game's own frame through untouched.
 
 See `../../vr-openxr-design.md` for the full design and where this fits.
 
@@ -26,7 +25,7 @@ See `../../vr-openxr-design.md` for the full design and where this fits.
     blits the texture into the swapchain image;
   - appends an `XrCompositionLayerQuad` (pose/size from the producer) to the
     app's layer list before calling the real `xrEndFrame`.
-- No producer → animated blue pulse fallback.
+- No producer → game frame passes through untouched (no overlay drawn).
 
 ## Build
 
@@ -43,17 +42,24 @@ Outputs:
 - `build/Release/irDashies-OpenXR-Layer.dll` — the layer
 - `build/Release/irDashies-OpenXR.json` — the manifest (absolute DLL path baked in)
 
-## Register / unregister (needs admin)
+## Register / unregister
 
-Implicit layers live under `HKLM\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit`.
-The scripts self-elevate.
+The app registers the layer per-user (no admin) when VR is enabled and
+unregisters it when VR is disabled / on quit / on uninstall — see
+`src/app/vr/openxrLayer.ts`. Implicit layers live under
+`HKCU\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit` (the OpenXR loader reads
+both HKCU and HKLM).
+
+For manual dev testing without the app, register/unregister the value directly
+(`reg`, no admin needed for HKCU):
 
 ```pwsh
-pwsh -File scripts/register.ps1      # enable
-pwsh -File scripts/unregister.ps1    # disable + remove
+$json = (Resolve-Path build/Release/irDashies-OpenXR.json).Path
+reg add "HKCU\Software\Khronos\OpenXR\1\ApiLayers\Implicit" /v $json /t REG_DWORD /d 0 /f
+reg delete "HKCU\Software\Khronos\OpenXR\1\ApiLayers\Implicit" /v $json /f
 ```
 
-Temporarily disable without unregistering:
+Temporarily disable a registered layer without removing it:
 
 ```pwsh
 $env:DISABLE_IRDASHIES_OPENXR = "1"
@@ -61,22 +67,19 @@ $env:DISABLE_IRDASHIES_OPENXR = "1"
 
 ## Test
 
-Any OpenXR D3D11 app works. Easiest sanity check is Khronos `hello_xr`
-(D3D11 graphics plugin) or iRacing with OpenXR selected in the launcher.
+The texture source is the irDashies app (`src/app/vr`). Any OpenXR D3D11 app
+works as the host — iRacing with OpenXR selected in the launcher, or Khronos
+`hello_xr` (D3D11 graphics plugin).
 
-1. Build + register the layer.
-2. Build + run the test producer (`../shm-test-producer`):
-   `build/Release/irdashies-shm-test-producer.exe`.
+1. Build the layer (above).
+2. Run irDashies (`npm start`) and enable the overlay with the toggle in the VR
+   settings section — this registers the layer (HKCU) and starts the producer.
 3. Launch the OpenXR app.
-4. Expect a 0.5 m quad ~1.5 m ahead showing the producer's animated
-   gradient + sweeping diagonal band. Stop the producer → it switches to the
-   blue pulse fallback.
+4. Expect the overlay quad in front of you. No producer (irDashies closed / VR
+   off) → the layer passes the game's frame through untouched.
 5. Confirm load even without a headset: check
    `%TEMP%\irdashies-openxr-layer.log` (negotiate / session / shared-memory
    stages). `XR_LOADER_DEBUG=all` makes the loader list the layer.
-
-The cross-process GPU path itself can be validated without a headset using
-`irdashies-shm-probe` (see `../shm-test-producer`).
 
 ## Status / limitations
 

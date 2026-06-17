@@ -1,7 +1,6 @@
 # VR overlay producer (Electron side)
 
 Feeds Electron offscreen-rendered frames to the OpenXR layer via shared memory.
-This is the real producer that replaces `native/shm-test-producer`.
 
 ```
 hidden OSR BrowserWindow (useSharedTexture)
@@ -23,9 +22,9 @@ hidden OSR BrowserWindow (useSharedTexture)
 
 ## Run (experimental, opt-in)
 
-The OpenXR layer must be built + registered first (see
-`native/openxr-layer`). Then `npm start` and enable the overlay with the toggle
-in the VR settings section.
+Build the OpenXR layer first (`npm run build:openxr`, see `native/openxr-layer`).
+Then `npm start` and enable the overlay with the toggle in the VR settings
+section — enabling registers the layer (HKCU, no admin) and starts the producer.
 
 Launch iRacing (OpenXR) and the overlay should appear on the quad. The addon is
 rebuilt against Electron automatically by electron-forge on `npm start` /

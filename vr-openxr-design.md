@@ -63,7 +63,7 @@ Consumer CANNOT be node addon. No Node runtime in game process. New build pipeli
 ## Stage 3 — Inject as OpenXR API Layer (game process)
 
 - DLL = implicit API layer. Export `irDashies_xrNegotiateLoaderApiLayerInterface`. JSON manifest (name, library_path, disable_environment, functions).
-- Registry: `HKLM\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit\{json_path}` = DWORD 0 (enabled).
+- Registry: `HKCU\SOFTWARE\Khronos\OpenXR\1\ApiLayers\Implicit\{json_path}` = DWORD 0 (enabled). Per-user → no admin. App writes it via `reg` on VR enable, removes on disable/quit/uninstall (see `src/app/vr/openxrLayer.ts`). Loader reads both HKCU and HKLM.
 - Hook `xrGetInstanceProcAddr`. Intercept chosen funcs. Rest → `Next()`.
 - **GATE TO iRACING.** Check `GetModuleFileName` for `iRacingSim64DX11.exe` in `xrCreateInstance`/`xrCreateSession`. Not iRacing → every hooked call pure pass-through. Layer vanish for all other games. Turns "break any VR game" into "only touch iRacing." Big risk cut vs OpenKneeboard (which inject everywhere).
 - `xrCreateSession` sniff graphics binding = `XrGraphicsBindingD3D11KHR` → D3D11 path only.
@@ -93,7 +93,7 @@ Per frame:
 SHM/texture/fence mechanics = well-trodden, OpenKneeboard = reference. Real cost here:
 
 1. **Positioning UX.** Per-widget quad need 3D pose each. 2D settings panel with XYZ/euler = miserable in headset. Real fix = in-headset reposition (gaze or motion controller grab) → add OpenXR action sets / input to layer = big extra work beyond rendering. MVP = numeric config + "recenter to head pose" button. Dominates UX quality. **DECIDE SCOPE.**
-2. **Install / elevation / registry.** Implicit layer = write HKLM → needs admin → separate elevated helper exe + UAC. Enable/disable. `disable_environment` var (turn off no uninstall). Clean removal on uninstall. Support-burden surface.
+2. **Install / registry.** RESOLVED: implicit layer registered in **HKCU** (per-user, no admin/UAC) by the app via `reg` on VR enable, removed on disable/quit/uninstall. DLL+manifest shipped as `extraResource`, built by `prePackage` hook. `disable_environment` var still available to mute without unregistering. See `src/app/vr/openxrLayer.ts`.
 3. **iRacing gate** (above) = main risk mitigation. Do it.
 4. **Testing.** Injected DLL = no unit test, Storybook useless. Build tiny standalone OpenXR host harness (render quad from SHM) to validate layer without launching iRacing each iteration. Budget for it.
 5. **Handle duplication** = same-user, same-GPU only. Producer publish PID in SHM. Laptop iGPU+dGPU = LUID mismatch care.

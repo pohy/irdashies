@@ -37,8 +37,18 @@ import {
   applyVrOverlaySettings,
 } from './app/vr/vrOverlay';
 import { onDashboardUpdated } from './app/storage/dashboardEvents';
+import {
+  registerOpenXrLayer,
+  unregisterOpenXrLayer,
+  unregisterOpenXrLayerSync,
+  vrLayerRegistered,
+} from './app/vr/openxrLayer';
 import type { VrOverlaySettings } from '@irdashies/types';
 
+// On uninstall, remove our OpenXR layer registration before Squirrel quits us.
+if (process.argv[1] === '--squirrel-uninstall') {
+  unregisterOpenXrLayerSync();
+}
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) app.quit();
 
@@ -93,8 +103,10 @@ app.on('ready', async () => {
     if (settings?.enabled) {
       startVrOverlay(overlayManager, settings); // no-op if already running
       applyVrOverlaySettings(settings);
+      void registerOpenXrLayer(); // register the OpenXR layer so games load it
     } else {
       stopVrOverlay(); // no-op if not running
+      void unregisterOpenXrLayer(); // stop injecting into OpenXR games
     }
   };
   syncVrOverlay(dashboard?.generalSettings?.vr);
@@ -136,6 +148,9 @@ app.on('before-quit', () => {
   overlayManager.markQuitting();
   keybindingManager?.stopGamepad();
   stopVrOverlay();
+  // Don't leave the layer injecting into OpenXR games while irDashies is closed.
+  // Sync so the reg.exe call completes before the process exits.
+  if (vrLayerRegistered()) unregisterOpenXrLayerSync();
   // Synchronous flush so any pending debounced reference-lap write completes
   // before the process exits.
   flushReferenceLapsOnShutdown();

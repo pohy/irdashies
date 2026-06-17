@@ -4,7 +4,10 @@ import { MakerDMG } from '@electron-forge/maker-dmg';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
+
+const OPENXR_OUT = path.resolve(__dirname, 'native/openxr-layer/build/Release');
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -12,7 +15,31 @@ const config: ForgeConfig = {
     icon: path.resolve(__dirname, 'docs/assets/icons/logo'),
     extraResource: [
       path.resolve(__dirname, 'docs/assets/icons'),
+      // OpenXR layer DLL + manifest, registered at runtime (see app/vr/openxrLayer).
+      path.join(OPENXR_OUT, 'irDashies-OpenXR-Layer.dll'),
+      path.join(OPENXR_OUT, 'irDashies-OpenXR.json'),
     ],
+  },
+  hooks: {
+    // Build the OpenXR layer (CMake) before packaging so its DLL + manifest exist
+    // for extraResource. Windows-only; npm start skips this (run build:openxr by
+    // hand when iterating on the layer).
+    prePackage: async (_forgeConfig, platform) => {
+      if (platform !== 'win32') return;
+      await new Promise<void>((resolve, reject) => {
+        const proc = spawn(
+          'pwsh',
+          ['-File', path.resolve(__dirname, 'native/build.ps1')],
+          { stdio: 'inherit' }
+        );
+        proc.on('error', reject);
+        proc.on('exit', (code) =>
+          code === 0
+            ? resolve()
+            : reject(new Error(`native/build.ps1 exited with code ${code}`))
+        );
+      });
+    },
   },
   rebuildConfig: {
     force: true,
