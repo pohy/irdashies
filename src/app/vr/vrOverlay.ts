@@ -89,6 +89,11 @@ export function startVrOverlay(
     preload: path.join(__dirname, 'preload.js'),
     backgroundThrottling: false,
     offscreen: { useSharedTexture: true },
+    // Own (in-memory) session so the supersample zoomFactor below stays local.
+    // Electron zoom is per-origin per-session by default, so without this the
+    // OSR's zoom would propagate to the visible same-origin overlay windows and
+    // scale them up too.
+    partition: 'vr-osr',
   } as unknown as Electron.WebPreferences;
 
   osrWindow = new BrowserWindow({
